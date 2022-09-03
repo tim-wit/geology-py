@@ -120,7 +120,7 @@ USA_shp = USA_shp.merge(wiki_df_v2, on = 'NAME')
 USA = USA_shp
 
 # pick a year of your choice from this list: 2019,2018,2017,2016,2015,2014,2013,2012,2011, or 2010. 
-# I graduated from TU in 2017, so let's pick that year.
+# I graduated from my undergrad university in 2017, so let's pick that year.
 year_of_choice = '2017'
 
 # !!! Now, Make a map plot of our data !!! #
