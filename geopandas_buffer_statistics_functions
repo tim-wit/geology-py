@@ -1,0 +1,304 @@
+# Author: TEW
+# Date: 05/11/2024
+# Purpose: Use geopandas, numpy, and pandas to generate a random normal distribution of latitude and longitude
+# values, and establish a function that creates a circular buffer of radius "r"
+# around a series of points in lat/long space. Then use the gpd "overlay" function to select the overlap of
+# "grid" x/y points that fall within the buffers of radius "r". Also relies on .sjoin (spatial joins)
+# extensively...
+
+# The functions below incorporate two separate geodataframes to select and summarize data within given radii
+# of one geodatframe.
+
+# --- Import the libraries --- #
+import pandas as pd
+import numpy as np
+import geopandas as gpd
+import pyproj
+import seaborn as sns
+from matplotlib import pyplot as plt
+
+# ---- Functions below ---- #
+
+def xy_converter(input_x_series, input_y_series, input_epsg_str, output_epsg_str):
+    """
+    # Given an input selection of two pandas series of X and Y data,
+    # convert said two series from one input coordinate system EPSG str
+    # (string is of format 'EPSG:1234' etc) to a coordinate system of another EPSG str.
+    # output is two pd.series (the first output series is for the converted 'X' points
+    # and the second output series is for the converted 'Y' points.
+    """
+
+    # Start by importing the Transformer command from pyproj if it isn't
+    # already loaded in.
+    import pyproj
+    from pyproj import Transformer
+    # Create the transformer object... make sure to use 'always_xy' == True
+    transformer = Transformer.from_crs(input_epsg_str, output_epsg_str, always_xy=True)
+    # Create the list of tuples of input coordinates (a list is faster to iterate over than pd.series)
+    coords_list = list(zip(input_x_series, input_y_series))
+    # Create an empty list we can append to
+    transformed_x_list = []
+    transformed_y_list = []
+    # Iterate over the input points and transform them with the transformer object
+    for pt in transformer.itransform(coords_list):
+        transformed_x_list.append(pt[0])
+        transformed_y_list.append(pt[-1])
+    # Return the converted x and y lists of coordinates as two pandas series
+    # (easy to add to an existing pandas dataframe this way).
+    return pd.Series(transformed_x_list), pd.Series(transformed_y_list)
+
+def select_within_buffer(gdf_to_sample_from, gdf_to_buffer, buffer_radius_miles):
+    """
+    Given a left and right gdf, calculate a buffer around the right gdf and
+    # output all the points that fall within the buffer (ie: all the points from
+    # the left gdf that fall within the buffer radius).
+    # NOTE!: Assumes both input gdfs are in CRS geometries that use meters
+    # AND that both gdfs also are in the same CRS/EPSG code for their respective geometries.
+    # Also worth noting that these are point based geodataframes... (ie: untested on polygons).
+    """
+
+    # Run the buffer technique
+    # Enter the buffer length in feet below
+    buffer_radius_feet = buffer_radius_miles * 5280
+    # Convert to meters
+    buffer_radius_meters = buffer_radius_feet * 0.3048
+    # Finally, make the buffer
+    gdf_to_buffer['geometry'] = gdf_to_buffer['geometry'].buffer(buffer_radius_meters)
+    # Select the points within the buffer using the gpd.sjoin command
+    points_within_gdf = gpd.sjoin(gdf_to_sample_from, gdf_to_buffer, how='inner', predicate='within')
+    # Select only the relevant columns for the left_gdf (ie: the gdf we are sampling points from)
+    points_within_gdf = points_within_gdf[['X_left', 'Y_left', 'geometry']].copy().reset_index(drop=True)
+    points_within_gdf.columns = ['X', 'Y', 'geometry']
+    # Return the within points as a separate gdf
+    return points_within_gdf
+
+# Make a new function that summarizes all XY points within each buffer
+# Model it off of the above select_within_buffer() function
+def summarize_each_buffer(gdf_to_sample_from, gdf_to_buffer, buffer_radius_miles):
+    # Given a left and right gdf, calculate a buffer around the right gdf and
+    # output all the points that fall within the buffer (ie: all the points from
+    # the left gdf that fall within the buffer radius).
+    # NOTE!: Assumes both input gdfs are in CRS geometries that use meters
+    # AND also are in the same CRS/EPSG code for their respective geometries.
+
+    # Run the buffer technique
+    # !!! enter the buffer length in feet below
+    buffer_radius_feet = buffer_radius_miles * 5280
+    # Convert to meters
+    buffer_radius_meters = buffer_radius_feet * 0.3048
+    # Finally, make the buffer
+    gdf_to_buffer['geometry'] = gdf_to_buffer['geometry'].buffer(buffer_radius_meters)
+
+    # --- 07/12/2024 notes: at this point, I think we'll need to make a list of
+    # each row within the gdf_to_buffer... ie: there will need to be a unique
+    # ID value for each unique buffer (each "Tree" or "Well" or "Tower")...
+    # We've already created a buffer around each singular point within the gdf_to_buffer
+    # gdf.... now it's just a matter of iteratively going over each
+    # individual buffered row of the gdf_to_buffer gdf.
+
+    # Maybe start by adding a unique Buffer_ID column to the gdf_to_buffer gdf
+    Buffer_ID_List = np.arange(1, len(gdf_to_buffer) + 1, 1).tolist()
+    gdf_to_buffer['Buffer_ID'] = Buffer_ID_List
+    # Try breaking the trees_gdf into a list of dataframes using np.array_split
+    buffer_gdfs_list = np.array_split(gdf_to_buffer, len(gdf_to_buffer))
+
+    # Now try and iterate on EACH of the geodataframes in buffer_gdfs_list
+    # Make some empty lists we will append statistical information to...
+    mean_of_points_list = []
+    max_of_points_list = []
+    min_of_points_list = []
+    variance_of_points_list = []
+
+    # iterate through the list of gdfs (each buffer object will have its own summary statistics).
+    for sub_gdf in buffer_gdfs_list:
+        # Select the points within the buffer using the gpd.sjoin command
+        points_within_gdf = gpd.sjoin(gdf_to_sample_from, sub_gdf, how='inner', predicate='within')
+        # Select only the relevant columns for the left_gdf (ie: the gdf we are sampling points from)
+        points_within_gdf = points_within_gdf[['X_left', 'Y_left', 'Z', 'geometry']].copy().reset_index(drop=True)
+        points_within_gdf.columns = ['X', 'Y', 'Z', 'geometry']
+
+        # Calculate and append the summary statistics
+        mean_of_points_list.append(points_within_gdf['Z'].mean())
+        max_of_points_list.append(points_within_gdf['Z'].max())
+        min_of_points_list.append(points_within_gdf['Z'].min())
+        variance_of_points_list.append(points_within_gdf['Z'].var())
+
+    # Now, add the summary statistics lists as columns back into the trees_gdf
+    gdf_to_buffer['Buffer_Mean'] = mean_of_points_list
+    gdf_to_buffer['Buffer_Min'] = min_of_points_list
+    gdf_to_buffer['Buffer_Max'] = max_of_points_list
+    gdf_to_buffer['Buffer_Var'] = variance_of_points_list
+
+    # Some of the variance values are nans... likely because there weren't enough points that fell within
+    # the given buffer.
+    # Let's fill the nans with a crazy negative number
+    gdf_to_buffer = gdf_to_buffer.fillna(-9999)
+    # Make a copy just to be safe of the input gdf_to_buffer
+    summarized_gdf_to_buffer = gdf_to_buffer.copy().reset_index(drop=True)
+    # Return the within points as a separate gdf
+    return summarized_gdf_to_buffer
+
+# # # 09/07/2024 ---> Trying to make a new function that allows us to input a 'Z' column
+def summarize_each_buffer_z(gdf_to_sample_from, gdf_to_buffer, z_column_str, buffer_radius_miles):
+    # Given a left and right gdf, calculate a buffer around the right gdf and
+    # output all the points that fall within the buffer (ie: all the points from
+    # the left gdf that fall within the buffer radius).
+    # NOTE!: Assumes both input gdfs are in CRS geometries that use meters
+    # AND also are in the same CRS/EPSG code for their respective geometries.
+
+    # Run the buffer technique
+    # !!! enter the buffer length in feet below
+    buffer_radius_feet = buffer_radius_miles * 5280
+    # Convert to meters
+    buffer_radius_meters = buffer_radius_feet * 0.3048
+    # Finally, make the buffer
+    gdf_to_buffer['geometry'] = gdf_to_buffer['geometry'].buffer(buffer_radius_meters)
+
+    # --- 07/12/2024 notes: at this point, I think we'll need to make a list of
+    # each row within the gdf_to_buffer... ie: there will need to be a unique
+    # ID value for each unique buffer (each "Tree" or "Well" or "Tower")...
+    # We've already created a buffer around each singular point within the gdf_to_buffer
+    # gdf.... now it's just a matter of iteratively going over each
+    # individual buffered row of the gdf_to_buffer gdf.
+
+    # Maybe start by adding a unique Buffer_ID column to the gdf_to_buffer gdf
+    Buffer_ID_List = np.arange(1, len(gdf_to_buffer) + 1, 1).tolist()
+    gdf_to_buffer['Buffer_ID'] = Buffer_ID_List
+    # Try breaking the trees_gdf into a list of dataframes using np.array_split
+    buffer_gdfs_list = np.array_split(gdf_to_buffer, len(gdf_to_buffer))
+
+    # Now try and iterate on EACH of the geodataframes in buffer_gdfs_list
+    # Make some empty lists we will append statistical information to...
+    mean_of_points_list = []
+    max_of_points_list = []
+    min_of_points_list = []
+    variance_of_points_list = []
+
+    # iterate through the list of gdfs (each buffer object will have its own summary statistics).
+    for sub_gdf in buffer_gdfs_list:
+        # Select the points within the buffer using the gpd.sjoin command
+        points_within_gdf = gpd.sjoin(gdf_to_sample_from, sub_gdf, how='inner', predicate='within')
+        # Select only the relevant columns for the left_gdf (ie: the gdf we are sampling points from)
+        points_within_gdf = points_within_gdf[['X_left', 'Y_left', z_column_str, 'geometry']].copy().reset_index(drop=True)
+        points_within_gdf.columns = ['X', 'Y', z_column_str, 'geometry']
+
+        # Calculate and append the summary statistics
+        mean_of_points_list.append(points_within_gdf[z_column_str].mean())
+        max_of_points_list.append(points_within_gdf[z_column_str].max())
+        min_of_points_list.append(points_within_gdf[z_column_str].min())
+        variance_of_points_list.append(points_within_gdf[z_column_str].var())
+
+    # Now, add the summary statistics lists as columns back into the trees_gdf
+    gdf_to_buffer['Buffer_Mean'] = mean_of_points_list
+    gdf_to_buffer['Buffer_Min'] = min_of_points_list
+    gdf_to_buffer['Buffer_Max'] = max_of_points_list
+    gdf_to_buffer['Buffer_Var'] = variance_of_points_list
+
+    # Some of the variance values are nans... likely because there weren't enough points that fell within
+    # the given buffer.
+    # Let's fill the nans with a crazy negative number
+    gdf_to_buffer = gdf_to_buffer.fillna(-9999)
+    # Make a copy just to be safe of the input gdf_to_buffer
+    summarized_gdf_to_buffer = gdf_to_buffer.copy().reset_index(drop=True)
+    # Return the within points as a separate gdf
+    return summarized_gdf_to_buffer
+
+# ---- End functions definitions, run the code below ---- #
+
+# Create some randomly distributed latitude and longitude values for the "trees"
+# or whatever geospatial dataset you would like to create radial buffers around.
+
+# numpy example:
+# mu, sigma = 0, 0.1 # mean and standard deviation
+# s = np.random.normal(mu, sigma, 1000)
+trees_long_array = np.random.normal(-100, 2, 50)
+trees_lat_array = np.random.normal(35, 2, 50)
+
+# Create similar, but longer, arrays for the "base" points
+base_long_array = np.random.normal(-100, 5, 5000)
+base_lat_array = np.random.normal(35, 5, 5000)
+
+# Let's put these arrays all into one pandas df and plot their distributions
+# to make sure the trees fall entirely within the bounds of the base distributions
+base_long_list = base_long_array.tolist()
+base_lat_list = base_lat_array.tolist()
+trees_long_list = trees_long_array.tolist()
+trees_lat_list = trees_lat_array.tolist()
+
+# make the intial dfs
+base_df = pd.DataFrame({'Longitude':base_long_list,'Latitude':base_lat_list})
+base_df['Label'] = 'Base'
+trees_df = pd.DataFrame({'Longitude':trees_long_list,'Latitude':trees_lat_list})
+trees_df['Label'] = 'Tree'
+
+# Concatenate into 2 separate dfs
+points_df = pd.concat([base_df, trees_df])
+
+# Uncomment the line below if you want to plot some of the results.
+###sns.scatterplot(data = points_df, x = 'Longitude', y = 'Latitude', hue = 'Label')
+
+# Using the xy_converter function for the first time to convert from a geographic coordinate system
+# (ie: a coordinate system that uses latitude and longitude) to a projected CRS (which uses meters).
+points_df['X'],points_df['Y'] = xy_converter(
+    points_df['Longitude'], points_df['Latitude'],
+    'EPSG:4326', 'EPSG:26713')
+
+# Now, for the code, let's split the points_df into label == 'Base' and label == 'Tree'
+base_df = points_df[points_df['Label'] == 'Base'].copy().reset_index(drop=True)
+base_df = base_df[['X','Y','Label']].copy()
+trees_df = points_df[points_df['Label'] == 'Tree'].copy().reset_index(drop=True)
+trees_df = trees_df[['X','Y','Label']].copy()
+
+# Now, convert these two dfs to gdfs... use the gpd function points_from_xy
+# gdf = geopandas.GeoDataFrame(
+#     df, geometry=geopandas.points_from_xy(x=df.Longitude, y=df.Latitude)
+# )
+trees_gdf = gpd.GeoDataFrame(trees_df, geometry = gpd.points_from_xy(
+    x = trees_df['X'], y = trees_df['Y']))
+base_gdf = gpd.GeoDataFrame(base_df, geometry = gpd.points_from_xy(
+    x = base_df['X'], y = base_df['Y']))
+
+# We need to add a 'Z' column... ie: an integer or float column of numeric values
+# that can be summarized using .mean() and other .groupby methods.
+Base_Z_List = np.random.normal(100, 35, len(base_gdf)).tolist()
+base_gdf['Z'] = Base_Z_List
+
+# Now, use the 'select_within_buffer' function to select only the points that
+# fall within an established radius of the trees gdf.
+# Remember, format is: select_within_buffer(gdf_to_sample_from, gdf_to_buffer, buffer_radius_miles)
+buffer_radius_miles = 25
+within_gdf = select_within_buffer(base_gdf, trees_gdf, buffer_radius_miles)
+
+# Now, let's take the within_gdf and convert back to LAT/LONG and write out the X and Y columns as a csv.
+# Convert within_gdf back to lat/long (EPSG:4326)
+within_gdf['Longitude'],within_gdf['Latitude'] = xy_converter(
+    within_gdf['X'], within_gdf['Y'],
+    'EPSG:26713', 'EPSG:4326')
+
+# Select only the Lat/Long columns, and write these two columns out as a dataframe
+within_df = within_gdf[['Longitude','Latitude']].copy().reset_index(drop=True)
+
+# Write out the df
+file_path_out = r'C:\Your\File\Pathway'
+file_path_out = file_path_out + '\\' + f'LatLongPointsWithin_{buffer_radius_miles}MileRadius.csv'
+# Uncomment the line below if you want to write the selected within data out.
+###within_df.to_csv(file_path_out, index=False)
+
+# ---- 07/12/2024 --- Try out the new gdf buffer summarize function and plot the results
+
+# Use the summarize_each_buffer_z function to calculate summary statistics
+# of each buffer object.
+summarized_trees_gdf = summarize_each_buffer_z(base_gdf, trees_gdf, 'Z', buffer_radius_miles)
+
+# Plot the geodataframe and color by one of the summary statistics.
+summarized_trees_gdf.plot('Buffer_Mean', cmap = 'cividis',
+                          legend = True,
+                          legend_kwds={'label': f'Mean of Values within {buffer_radius_miles} Mile Radius', 'orientation': 'vertical'})
+
+
+# # # Test Plotting Below # # # 
+# base = trees_gdf.plot(color='white', edgecolor='black')
+# base_gdf.plot(ax=base, marker='^', color='blue', markersize=1);
+#
+# ax = base_gdf.plot(color='k', zorder=2, markersize = 1)
+# trees_gdf.plot(ax=ax, zorder=1);
