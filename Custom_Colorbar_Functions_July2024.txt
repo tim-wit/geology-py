@@ -1,0 +1,95 @@
+# Purpose: Create a custom colorbar using Matplotlib, and see how good
+# it looks when sweeping between 3 total RGB values.
+# Date: 06/13/2024
+# Author: TEW
+
+# Import libraries
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import matplotlib as mpl
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+
+# Referencing a lot of groundwork outlined in the matplotlib documentation...
+# Here is a link to the page being referenced:
+# # # https://matplotlib.org/stable/users/explain/colors/colormap-manipulation.html
+
+viridis = mpl.colormaps['viridis'].resampled(10)
+
+
+def plot_examples(colormaps):
+    """
+    Helper function to plot data with associated colormap.
+    """
+    np.random.seed(19680801)
+    data = np.random.randn(30, 30)
+    n = len(colormaps)
+    fig, axs = plt.subplots(1, n, figsize=(n * 2 + 2, 3),
+                            layout='constrained', squeeze=False)
+    for [ax, cmap] in zip(axs.flat, colormaps):
+        psm = ax.pcolormesh(data, cmap=cmap, rasterized=True, vmin=-4, vmax=4)
+        fig.colorbar(psm, ax=ax)
+    plt.show()
+
+
+# Make a function that takes 3 rgb triplets and makes a ramp between them all
+def diverge_colorbar(first_rgb_color, middle_rgb_color, end_rgb_color, output_str_name):
+    # first_rgb_color = [94,12,6]
+    # middle_rgb_color = [193,194,151]
+    # end_rgb_color = [19,242,57]
+
+    # Make the first color ramp (from start color to middle color)
+    N = 128
+    first_vals = np.ones((N, 4))
+    first_vals[:, 0] = np.linspace(first_rgb_color[0] / 256, middle_rgb_color[0] / 256, N)
+    first_vals[:, 1] = np.linspace(first_rgb_color[1] / 256, middle_rgb_color[1] / 256, N)
+    first_vals[:, 2] = np.linspace(first_rgb_color[2] / 256, middle_rgb_color[2] / 256, N)
+
+    # Make the second color ramp (from middle color to end color)
+    N = 128
+    second_vals = np.ones((N, 4))
+    second_vals[:, 0] = np.linspace(middle_rgb_color[0] / 256, end_rgb_color[0] / 256, N)
+    second_vals[:, 1] = np.linspace(middle_rgb_color[1] / 256, end_rgb_color[1] / 256, N)
+    second_vals[:, 2] = np.linspace(middle_rgb_color[2] / 256, end_rgb_color[2] / 256, N)
+
+    # use np.vstack to stack these on top of each other
+    newcolors = np.vstack((first_vals, second_vals))
+    # Name the colormap and assign it
+    newcmp = ListedColormap(newcolors, name=output_str_name)
+    # newcmp = ListedColormap(first_vals)
+    plot_examples([viridis, newcmp])
+
+
+# *** run the func we made earlier ***
+# Start by creating a custom name for the new colorbar.
+output_str_name = 'RedGreen'
+
+# Establish the 3 rgb triplets
+initial_rgb_color = [2, 117, 71]
+center_rgb_color = [255,255,255]
+ending_rgb_color = [176, 9, 23]
+
+# Call the function with the input variables we established
+diverge_colorbar(initial_rgb_color, center_rgb_color, ending_rgb_color, output_str_name)
+
+# Start by creating a custom name for the new colorbar.
+output_str_name = 'Estonia'
+
+# Establish the 3 rgb triplets
+initial_rgb_color = [86, 90, 209]
+center_rgb_color = [255,255,255]
+ending_rgb_color = [0,0,0]
+
+# Call the function with the input variables we established
+diverge_colorbar(initial_rgb_color, center_rgb_color, ending_rgb_color, output_str_name)
+
+# Start by creating a custom name for the new colorbar.
+output_str_name = 'Blues'
+
+# Establish the 3 rgb triplets
+initial_rgb_color = [202, 221, 250]
+center_rgb_color = [7, 103, 250]
+ending_rgb_color = [3, 42, 102]
+
+# Call the function with the input variables we established
+diverge_colorbar(initial_rgb_color, center_rgb_color, ending_rgb_color, output_str_name)
