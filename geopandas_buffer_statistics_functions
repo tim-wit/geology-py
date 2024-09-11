@@ -91,7 +91,7 @@ def summarize_each_buffer(gdf_to_sample_from, gdf_to_buffer, buffer_radius_miles
 
     # --- 07/12/2024 notes: at this point, I think we'll need to make a list of
     # each row within the gdf_to_buffer... ie: there will need to be a unique
-    # ID value for each unique buffer (each "Tree" or "Well" or "Tower")...
+    # ID value for each unique buffer (each "Tree" or "Station" or "Tower")...
     # We've already created a buffer around each singular point within the gdf_to_buffer
     # gdf.... now it's just a matter of iteratively going over each
     # individual buffered row of the gdf_to_buffer gdf.
@@ -156,7 +156,7 @@ def summarize_each_buffer_z(gdf_to_sample_from, gdf_to_buffer, z_column_str, buf
 
     # --- 07/12/2024 notes: at this point, I think we'll need to make a list of
     # each row within the gdf_to_buffer... ie: there will need to be a unique
-    # ID value for each unique buffer (each "Tree" or "Well" or "Tower")...
+    # ID value for each unique buffer (each "Tree" or "Station" or "Tower")...
     # We've already created a buffer around each singular point within the gdf_to_buffer
     # gdf.... now it's just a matter of iteratively going over each
     # individual buffered row of the gdf_to_buffer gdf.
