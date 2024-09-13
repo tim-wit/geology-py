@@ -1,0 +1,216 @@
+# Author: TEW
+# Date: 09/08/2024
+# Purpose: To load in a webpage from Wikipedia as a big string and create a table
+
+# *** Load the libraries *** #
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+import numpy as np
+import re
+
+# *** Functions *** #
+
+# Select all characters between two substrings
+def between_strings(text_string, first_substring, second_substring):
+    """Given an input string and two substrings, output all characters from the input string that fall between
+    the two substrings. """
+    import re
+    result = re.search(first_substring + '(.*)' + second_substring, text_string)
+    return result.group(1)
+
+# Make a function that creates a list of the player's Wikipedia page URLs.
+
+# Make a separate function that scrapes player name, age, weight, height, and position from a list of player URLs
+
+
+
+# *** Testing *** #
+
+team_urls_list = [
+
+'https://en.wikipedia.org/wiki/Template:Dallas_Stars_roster',
+'https://en.wikipedia.org/wiki/Template:Anaheim_Ducks_roster',
+'https://en.wikipedia.org/wiki/Calgary_Flames',
+'https://en.wikipedia.org/wiki/Template:Edmonton_Oilers_roster',
+'https://en.wikipedia.org/wiki/Template:Los_Angeles_Kings_roster',
+'https://en.wikipedia.org/wiki/Template:San_Jose_Sharks_roster',
+'https://en.wikipedia.org/wiki/Template:Seattle_Kraken_roster',
+'https://en.wikipedia.org/wiki/Template:Vancouver_Canucks_roster',
+'https://en.wikipedia.org/wiki/Template:Vegas_Golden_Knights_roster',
+'https://en.wikipedia.org/wiki/Template:Chicago_Blackhawks_roster',
+'https://en.wikipedia.org/wiki/Template:Colorado_Avalanche_roster',
+'https://en.wikipedia.org/wiki/Template:Minnesota_Wild_roster',
+'https://en.wikipedia.org/wiki/Template:Nashville_Predators_roster',
+'https://en.wikipedia.org/wiki/Template:St._Louis_Blues_roster',
+'https://en.wikipedia.org/wiki/Template:Utah_Hockey_Club_roster',
+'https://en.wikipedia.org/wiki/Template:Winnipeg_Jets_roster',
+'https://en.wikipedia.org/wiki/Template:Boston_Bruins_roster',
+'https://en.wikipedia.org/wiki/Template:Buffalo_Sabres_roster',
+'https://en.wikipedia.org/wiki/Template:Detroit_Red_Wings_roster',
+'https://en.wikipedia.org/wiki/Template:Florida_Panthers_roster',
+'https://en.wikipedia.org/wiki/Template:Montreal_Canadiens_roster',
+'https://en.wikipedia.org/wiki/Template:Ottawa_Senators_roster',
+'https://en.wikipedia.org/wiki/Template:Tampa_Bay_Lightning_roster',
+'https://en.wikipedia.org/wiki/Template:Toronto_Maple_Leafs_roster',
+'https://en.wikipedia.org/wiki/Template:Carolina_Hurricanes_roster',
+'https://en.wikipedia.org/wiki/Template:Columbus_Blue_Jackets_roster',
+'https://en.wikipedia.org/wiki/Template:New_Jersey_Devils_roster',
+'https://en.wikipedia.org/wiki/Template:New_York_Islanders_roster',
+'https://en.wikipedia.org/wiki/Template:New_York_Rangers_roster',
+'https://en.wikipedia.org/wiki/Template:Philadelphia_Flyers_roster',
+'https://en.wikipedia.org/wiki/Template:Pittsburgh_Penguins_roster',
+'https://en.wikipedia.org/wiki/Template:Washington_Capitals_roster'
+
+]
+
+# wiki = 'https://en.wikipedia.org/wiki/Template:Dallas_Stars_roster'
+
+# Create an empty dfs list we will append the intermediate team dfs to
+dfs_list = []
+
+for wiki in team_urls_list:
+    website_url = requests.get(wiki).text
+    soup = BeautifulSoup(website_url)
+
+    a_tag_results = soup.find_all('a')
+    # Try and iterate over this
+    positive_items_list = []
+    for tag in a_tag_results:
+        # test_href_results[76].parent
+        if '<span class="fn"><a href=' in str(tag.parent):
+            target_wikipage_str = between_strings(text_string = str(tag.parent),
+                                                  first_substring='<span class="fn"><a href=',
+                                                  second_substring=' title=')
+            positive_items_list.append(target_wikipage_str)
+
+    # Remove superfluous substrings and special characters from each item in the positive_items_list.
+    cleaned_urls_list = []
+    for item in positive_items_list:
+        # remove double quotation marks characters
+        item = item.replace('"', '')
+        # Make sure to append the initial www.wikipedia.org url prefix as well
+        item = 'https://en.wikipedia.org' + item
+        # Finally, append the cleaned string to the cleaned_urls_list
+        cleaned_urls_list.append(item)
+
+
+    # Create some empty lists that we will append to.
+    positive_name_list = []
+    positive_height_list = []
+    positive_weight_list = []
+    positive_age_list = []
+    positive_position_list = []
+    # positive_shoots_list = []
+
+    for wiki_url in cleaned_urls_list:
+        try:
+            website_url = requests.get(wiki_url).text
+            soup = BeautifulSoup(website_url)
+            # Now that we have the soup, try and find each td tag with a class == infobox-data...
+            # Then, try and extract each of the relevant infobox-data text results (age, height, weight, position, shoots, etc)
+            ### positive_name_list.append(wiki_url.split(r'/')[-1])
+            positive_name_list.append(soup.find('th', {'class': 'infobox-above fn'}).text)
+            positive_age_list.append(soup.find('span', {'class': 'noprint ForceAgeToShow'}).text)
+            positive_position_list.append(soup.find('td', {'class': 'infobox-data role'}).text)
+
+            # *** More complicated extractions *** #
+            # potential_height_results = (soup.find_all('td', {'class': 'infobox-data'}).text)
+            # Trying to get heights listed
+            td_tag_results = soup.find_all('td', {'class': 'infobox-data'})
+            # Try and iterate over this
+            for tag in td_tag_results:
+                if (('in' in tag.parent.text) & ('cm' in tag.parent.text)):
+                    numeric_items_list = re.findall(r'\d+', tag.parent.text)
+                    new_numeric_items_list = []
+                    for item in numeric_items_list:
+                        new_numeric_items_list.append(int(item))
+                    max_value_height = max(new_numeric_items_list)
+            positive_height_list.append(max_value_height)
+
+            # Now, do weight
+            td_tag_results = soup.find_all('td', {'class': 'infobox-data'})
+            for tag in td_tag_results:
+                if (('lb' in tag.parent.text) & ('kg' in tag.parent.text)):
+                    numeric_items_list = re.findall(r'\d+', tag.parent.text)
+                    new_numeric_items_list = []
+                    for item in numeric_items_list:
+                        new_numeric_items_list.append(int(item))
+                    max_value_weight = max(new_numeric_items_list)
+            positive_weight_list.append(max_value_weight)
+
+
+        except:
+            pass
+            # positive_name_list.append(np.nan)
+            # positive_height_list.append(np.nan)
+            # positive_weight_list.append(np.nan)
+            # positive_age_list.append(np.nan)
+            # positive_position_list.append(np.nan)
+
+    # Make a dataframe now
+    players_df = pd.DataFrame({'Name':positive_name_list,'Height_cm':positive_height_list,'Weight_lbs':positive_weight_list,
+                               'Age_yrs':positive_age_list,'Position':positive_position_list})
+    # remove the white space from the Position column
+    players_df['Position'] = players_df['Position'].str.replace('\n','')
+    # extract only the numeric values from the 'Age_yrs' column
+    players_df['Age_yrs'] = players_df['Age_yrs'].str.extract('(\d+)')
+    players_df['Age_yrs'] = players_df['Age_yrs'].astype(int)
+    # Add the team url as a column
+    players_df['Team_URL'] = wiki
+    # drop duplicate rows
+    players_df = players_df.drop_duplicates().reset_index(drop=True)
+    # append to the list of dfs
+    dfs_list.append(players_df)
+
+# Outside of the main loop, concatenate all the dfs into one big df
+NHL_Players_df = pd.concat(dfs_list).reset_index(drop=True)
+
+# Nice!!! That worked really nicely :)
+
+# Try and clean up the 'Positions' column
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Position'].str.replace(' ','')
+# Make everything lower case also
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.lower()
+# Make 'center' spelled as 'centre'
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('center','centre')
+# Make 'center' spelled as 'centre'
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('defense','defence')
+# Make 'center' spelled as 'centre'
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('wing','winger')
+# Reorder some slash names
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('rightwing/centre','centre/rightwing')
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('leftwing/centre','centre/leftwing')
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('rightwinger/centre','centre/rightwing')
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('leftwinger/centre','centre/leftwing')
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('centre/rightwinger','centre/rightwing')
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('centre/leftwinger','centre/leftwing')
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('winger/centre','centre/winger')
+
+# Correct for 'wingerer' XD
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('wing','winger')
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('wingerer','winger')
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('wingerer','winger')
+# Defenceman becomes just defence
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('defenceman','defence')
+
+# Reorder center and winger
+NHL_Players_df['Cleaned_Position'] = NHL_Players_df['Cleaned_Position'].str.replace('winger/centre','centre/winger')
+
+# Do some quick value_counts just to check things
+# NHL_Players_df['Cleaned_Position'].value_counts()
+
+# Finally, extract the team name
+# start by splitting on '/' and grabbing the last item
+NHL_Players_df['Team_Name'] = NHL_Players_df['Team_URL'].str.split('/').str[-1]
+# Remove 'Template:' and '_roster' and we should be good!
+NHL_Players_df['Team_Name'] = NHL_Players_df['Team_Name'].str.replace('Template:','')
+NHL_Players_df['Team_Name'] = NHL_Players_df['Team_Name'].str.replace('_roster','')
+
+# Add a Height_ft column and a Weight_kg column
+NHL_Players_df['Height_ft'] = NHL_Players_df['Height_cm'] / 30.48
+NHL_Players_df['Weight_kg'] = NHL_Players_df['Weight_lbs'] * 0.453592
+
+# Reorder some of the columns
+NHL_Players_df = NHL_Players_df[['Name', 'Height_cm', 'Height_ft', 'Weight_kg', 'Weight_lbs', 'Age_yrs', 'Position',
+       'Cleaned_Position', 'Team_Name', 'Team_URL']]
